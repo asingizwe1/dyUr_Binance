@@ -96,18 +96,18 @@ export default function App() {
   const logLinesFor = (ac: AssetClass) =>
     ac === "prediction"
       ? [
-          `$ agent.scan(assetClass="prediction")`,
-          `→ baw prediction market list --sortBy VOLUME`,
-          `→ baw prediction market last-trade-price ...`,
-          `✓ candidates scored`,
-        ]
+        `$ agent.scan(assetClass="prediction")`,
+        `→ baw prediction market list --sortBy VOLUME`,
+        `→ baw prediction market last-trade-price ...`,
+        `✓ candidates scored`,
+      ]
       : [
-          `$ agent.scan(assetClass="${ac}")`,
-          `→ crypto-market-rank.query(rankType="social_hype")`,
-          `→ trading-signal.smartMoneyFlow(symbols=[...])`,
-          `→ query-token-info.volume24h(symbols=[...])`,
-          `✓ candidates scored`,
-        ];
+        `$ agent.scan(assetClass="${ac}")`,
+        `→ crypto-market-rank.query(rankType="social_hype")`,
+        `→ trading-signal.smartMoneyFlow(symbols=[...])`,
+        `→ query-token-info.volume24h(symbols=[...])`,
+        `✓ candidates scored`,
+      ];
 
   const runScan = async () => {
     setStage("scanning");
@@ -126,11 +126,8 @@ export default function App() {
       const scored = await scan(assetClass);
       setRows(scored);
     } catch (err) {
-      // Backend not running (or `baw` not installed/authed on it yet) —
-      // fall back to local mock data so the demo still runs end to end.
-      setBackendError("Backend unreachable — showing local mock data instead of a live scan.");
-      const universe = await fetchCryptoUniverse();
-      setRows(scoreUniverse(universe, { volume: 0.25, sentiment: 0.3, smartMoney: 0.3 }));
+      setBackendError(err instanceof Error ? err.message : "Scan failed — check the backend terminal for the real error.");
+      setRows([]);
     }
     setTimeout(() => setStage("scored"), 300);
   };
@@ -172,119 +169,119 @@ export default function App() {
           <div className="flex flex-col gap-3 text-[12px]" style={{ color: INK }}>
             <div className="flex flex-wrap items-center gap-3">
               <span>Sensitivity</span>
-                {(Object.keys(SENSITIVITY) as SensitivityKey[]).map((key) => (
-                  <label key={key} className="flex items-center gap-1 cursor-pointer">
-                    <input type="radio" name="sensitivity" checked={sensitivity === key} onChange={() => setSensitivity(key)} />
-                    {SENSITIVITY[key].label}
-                  </label>
-                ))}
-              </div>
-              <div className="text-[10px] opacity-60">
-                Under the hood: notify when a candidate's composite score is at least {threshold.toFixed(1)} standard
-                deviations above the average of this scan's universe.
-              </div>
-              <div className="flex items-center gap-2">
-                <span>Notify email</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="border-2 px-2 py-1 text-[12px] flex-1"
-                  style={{ borderColor: INK }}
-                />
-              </div>
-              <div className="flex justify-end">
-                <Btn onClick={runScan} primary disabled={stage === "scanning"}>
-                  {stage === "idle" ? "Run scan" : "Re-run scan"}
-                </Btn>
-              </div>
+              {(Object.keys(SENSITIVITY) as SensitivityKey[]).map((key) => (
+                <label key={key} className="flex items-center gap-1 cursor-pointer">
+                  <input type="radio" name="sensitivity" checked={sensitivity === key} onChange={() => setSensitivity(key)} />
+                  {SENSITIVITY[key].label}
+                </label>
+              ))}
+            </div>
+            <div className="text-[10px] opacity-60">
+              Under the hood: notify when a candidate's composite score is at least {threshold.toFixed(1)} standard
+              deviations above the average of this scan's universe.
+            </div>
+            <div className="flex items-center gap-2">
+              <span>Notify email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="border-2 px-2 py-1 text-[12px] flex-1"
+                style={{ borderColor: INK }}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Btn onClick={runScan} primary disabled={stage === "scanning"}>
+                {stage === "idle" ? "Run scan" : "Re-run scan"}
+              </Btn>
+            </div>
+          </div>
+        </Window>
+
+        {backendError && (
+          <div className="w-full max-w-2xl text-[11px] px-2" style={{ color: "#8A5A00" }}>
+            ⚠ {backendError}
+          </div>
+        )}
+
+        {stage !== "idle" && (
+          <Window title="Live scan — MCP / baw calls" icon="▣" tint="#111111">
+            <div className="text-[12px] leading-6" style={{ color: "#D7F26D" }}>
+              {logLines.map((l, idx) => <div key={idx}>{l}</div>)}
+              {stage === "scanning" && <span className="animate-pulse">▮</span>}
             </div>
           </Window>
+        )}
 
-          {backendError && (
-            <div className="w-full max-w-2xl text-[11px] px-2" style={{ color: "#8A5A00" }}>
-              ⚠ {backendError}
-            </div>
-          )}
-
-          {stage !== "idle" && (
-            <Window title="Live scan — MCP / baw calls" icon="▣" tint="#111111">
-              <div className="text-[12px] leading-6" style={{ color: "#D7F26D" }}>
-                {logLines.map((l, idx) => <div key={idx}>{l}</div>)}
-                {stage === "scanning" && <span className="animate-pulse">▮</span>}
-              </div>
-            </Window>
-          )}
-
-          {(stage === "scored" || stage === "notified" || stage === "confirmed") && rows.length > 0 && (
-            <Window title="Score breakdown" icon="≡">
-              <table className="w-full text-[11px]" style={{ color: INK }}>
-                <thead>
-                  <tr className="border-b-2" style={{ borderColor: INK }}>
-                    <th className="text-left py-1">Symbol</th>
-                    {Object.keys(rows[0].z).map((k) => (
-                      <th key={k} className="text-right">z({k})</th>
-                    ))}
-                    <th className="text-right">composite</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.symbol} className={r.composite >= threshold ? "font-bold" : ""}>
-                      <td className="py-1">{r.symbol}</td>
-                      {Object.keys(rows[0].z).map((k) => (
-                        <td key={k} className="text-right">{r.z[k]?.toFixed(2)}</td>
-                      ))}
-                      <td className="text-right" style={{ background: r.composite >= threshold ? SIGNAL : "transparent" }}>
-                        {r.composite.toFixed(2)}
-                      </td>
-                    </tr>
+        {(stage === "scored" || stage === "notified" || stage === "confirmed") && rows.length > 0 && (
+          <Window title="Score breakdown" icon="≡">
+            <table className="w-full text-[11px]" style={{ color: INK }}>
+              <thead>
+                <tr className="border-b-2" style={{ borderColor: INK }}>
+                  <th className="text-left py-1">Symbol</th>
+                  {Object.keys(rows[0].z).map((k) => (
+                    <th key={k} className="text-right">z({k})</th>
                   ))}
-                </tbody>
-              </table>
-              {qualifies && stage === "scored" && (
-                <div className="mt-3 flex justify-end">
-                  <Btn onClick={sendNotification} primary>Send notification →</Btn>
+                  <th className="text-right">composite</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.symbol} className={r.composite >= threshold ? "font-bold" : ""}>
+                    <td className="py-1">{r.symbol}</td>
+                    {Object.keys(rows[0].z).map((k) => (
+                      <td key={k} className="text-right">{r.z[k]?.toFixed(2)}</td>
+                    ))}
+                    <td className="text-right" style={{ background: r.composite >= threshold ? SIGNAL : "transparent" }}>
+                      {r.composite.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {qualifies && stage === "scored" && (
+              <div className="mt-3 flex justify-end">
+                <Btn onClick={sendNotification} primary>Send notification →</Btn>
+              </div>
+            )}
+          </Window>
+        )}
+
+        {(stage === "notified" || stage === "confirmed") && qualifies && top && (
+          <Window title="Buy signal — confirm required" icon="✉">
+            <div className="text-[12px] space-y-2" style={{ color: INK }}>
+              <p>
+                <span className="font-bold">{top.symbol}</span> crossed your threshold: composite{" "}
+                <span className="font-bold">{top.composite.toFixed(2)}σ</span>.
+              </p>
+              <p>
+                Kelly-sized suggestion: <span className="font-bold">{(top.kellyFraction * 100).toFixed(1)}%</span> of the{" "}
+                {ASSET_LABELS[assetClass].toLowerCase()} allocation bucket.
+              </p>
+              {stage === "notified" ? (
+                <div className="flex gap-2 justify-end pt-2">
+                  <Btn onClick={() => setStage("scored")}>Dismiss</Btn>
+                  <Btn onClick={() => setStage("confirmed")} primary>Confirm &amp; execute</Btn>
+                </div>
+              ) : (
+                <div className="pt-2 text-[12px] font-bold" style={{ color: "#2E7D32" }}>
+                  ✓ Sent to backend — check server logs for the baw order result.
                 </div>
               )}
-            </Window>
-          )}
+            </div>
+          </Window>
+        )}
 
-          {(stage === "notified" || stage === "confirmed") && qualifies && top && (
-            <Window title="Buy signal — confirm required" icon="✉">
-              <div className="text-[12px] space-y-2" style={{ color: INK }}>
-                <p>
-                  <span className="font-bold">{top.symbol}</span> crossed your threshold: composite{" "}
-                  <span className="font-bold">{top.composite.toFixed(2)}σ</span>.
-                </p>
-                <p>
-                  Kelly-sized suggestion: <span className="font-bold">{(top.kellyFraction * 100).toFixed(1)}%</span> of the{" "}
-                  {ASSET_LABELS[assetClass].toLowerCase()} allocation bucket.
-                </p>
-                {stage === "notified" ? (
-                  <div className="flex gap-2 justify-end pt-2">
-                    <Btn onClick={() => setStage("scored")}>Dismiss</Btn>
-                    <Btn onClick={() => setStage("confirmed")} primary>Confirm &amp; execute</Btn>
-                  </div>
-                ) : (
-                  <div className="pt-2 text-[12px] font-bold" style={{ color: "#2E7D32" }}>
-                    ✓ Sent to backend — check server logs for the baw order result.
-                  </div>
-                )}
-              </div>
-            </Window>
-          )}
-
-          {!qualifies && stage === "scored" && top && (
-            <Window title="No signal this cycle" icon="○">
-              <p className="text-[12px]" style={{ color: INK }}>
-                Top candidate {top.symbol} scored {top.composite.toFixed(2)}σ, below your current sensitivity threshold.
-                No notification sent — agent will re-scan next cycle.
-              </p>
-            </Window>
-          )}
-        </>
+        {!qualifies && stage === "scored" && top && (
+          <Window title="No signal this cycle" icon="○">
+            <p className="text-[12px]" style={{ color: INK }}>
+              Top candidate {top.symbol} scored {top.composite.toFixed(2)}σ, below your current sensitivity threshold.
+              No notification sent — agent will re-scan next cycle.
+            </p>
+          </Window>
+        )}
+      </>
     </div>
   );
 }

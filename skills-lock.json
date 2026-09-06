@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "skills": {
+    "crypto-market-rank": {
+      "source": "binance/binance-skills-hub",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/binance-web3/crypto-market-rank/SKILL.md",
+      "computedHash": "4f2bc27fb48ba2728f428289bce5308b21367e644d2ee37bd8f53ed96d70aa6d"
+    }
+  }
+}

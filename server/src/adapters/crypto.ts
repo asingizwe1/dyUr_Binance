@@ -4,51 +4,66 @@ import type { AssetMetrics } from "../types.js";
 
 const execFileAsync = promisify(execFile);
 
-// Wherever `npx skills add .../crypto-market-rank` installed it for your
-// agent — check your actual install (e.g. .claude/skills/crypto-market-rank)
-// and point this at the real path, or set it via env var.
-const SKILL_DIR = process.env.CRYPTO_MARKET_RANK_SKILL_DIR ?? "./.claude/skills/crypto-market-rank";
+const SKILL_DIR = process.env.CRYPTO_MARKET_RANK_SKILL_DIR ?? "../.agents/skills/crypto-market-rank";
+interface SkillResponse<T> {
+  code: string;
+  message: string | null;
+  data: T;
+  success: boolean;
+}
 
 async function callSkill<T = unknown>(command: string, body: Record<string, unknown>): Promise<T> {
-  const { stdout } = await execFileAsync("node", [`${SKILL_DIR}/scripts/cli.mjs`, command, JSON.stringify(body)]);
-  return JSON.parse(stdout) as T;
+  let stdout: string;
+  try {
+    ({ stdout } = await execFileAsync("node", [`${SKILL_DIR}/scripts/cli.mjs`, command, JSON.stringify(body)]));
+  } catch (err: any) {
+    // Network failure or HTTP >= 400 — the script exits non-zero, execFile rejects,
+    // and the real reason is in err.stdout/err.stderr per cli.md's error section.
+    throw new Error(`crypto-market-rank ${command} failed (exit ${err?.code}): ${err?.stderr || err?.stdout || err.message}`);
+  }
+  const parsed = JSON.parse(stdout) as SkillResponse<T>;
+  if (parsed.code !== "000000") {
+    throw new Error(`crypto-market-rank ${command} returned code ${parsed.code}: ${parsed.message}`);
+  }
+  return parsed.data;
 }
 
+// Confirmed against a real response.
 interface TokenRankItem {
+  contractAddress: string;
   symbol: string;
-  price: string; // numeric fields arrive as strings per the skill's rules — convert before arithmetic
-  volume?: string;
-  marketCap?: string;
+  price: string;
+  marketCap: string;
+  volume24h: string;
+  smartMoneyHoldingPercent: number | null; // already a number, not string — no conversion needed
 }
 
-interface SocialHypeItem {
-  symbol: string;
-  hypeScore: number; // field name unconfirmed — verify against real output
-}
-
-interface SmartMoneyItem {
-  symbol: string;
-  netInflow: number; // field name unconfirmed — verify against real output
+// NOT independently confirmed — still per cli.md's documented shape.
+// If sentiment ends up wrong/empty, this is the interface to check first.
+interface SocialHypeEntry {
+  metaInfo: { contractAddress: string; symbol: string };
+  socialHypeInfo: { socialHype: number; sentiment: string };
 }
 
 const CHAIN_ID = "56"; // BSC
 
 export async function fetchCryptoUniverse(): Promise<AssetMetrics[]> {
-  const [trending, hype, smartMoney] = await Promise.all([
-    callSkill<{ list: TokenRankItem[] }>("token-rank", { rankType: 10, chainId: CHAIN_ID, page: 1, size: 20 }),
-    callSkill<{ list: SocialHypeItem[] }>("social-hype", { chainId: CHAIN_ID, targetLanguage: "en", timeRange: 1 }),
-    callSkill<{ list: SmartMoneyItem[] }>("smart-money-inflow", { chainId: CHAIN_ID, period: "24h" }),
+  const [trending, hype] = await Promise.all([
+    callSkill<{ tokens: TokenRankItem[] }>("token-rank", { rankType: 10, chainId: CHAIN_ID, page: 1, size: 20 }),
+    callSkill<{ leaderBoardList: SocialHypeEntry[] }>("social-hype", { chainId: CHAIN_ID, targetLanguage: "en", timeRange: 1 }),
   ]);
 
-  const hypeBySymbol = new Map(hype.list.map((h) => [h.symbol, h.hypeScore]));
-  const smartMoneyBySymbol = new Map(smartMoney.list.map((s) => [s.symbol, s.netInflow]));
+  const norm = (addr: string) => addr.toLowerCase();
+  const hypeByAddr = new Map(hype.leaderBoardList.map((h) => [norm(h.metaInfo.contractAddress), h.socialHypeInfo.socialHype]));
+  const hypeValues = [...hypeByAddr.values()];
+  const meanHype = hypeValues.length ? hypeValues.reduce((a, b) => a + b, 0) / hypeValues.length : 0;
 
-  return trending.list.map((t) => ({
+  return trending.tokens.map((t) => ({
     symbol: t.symbol,
     values: {
-      volume: Number(t.volume ?? 0),
-      sentiment: hypeBySymbol.get(t.symbol) ?? 0,
-      smartMoney: smartMoneyBySymbol.get(t.symbol) ?? 0,
+      volume: Number(t.volume24h ?? 0),
+      sentiment: hypeByAddr.get(norm(t.contractAddress)) ?? meanHype, // neutral, not punishing
+      smartMoney: t.smartMoneyHoldingPercent ?? 0,
     },
     marketPrice: 0.5,
     raw: { price: t.price, marketCap: t.marketCap },
@@ -57,17 +72,17 @@ export async function fetchCryptoUniverse(): Promise<AssetMetrics[]> {
 
 /** Tokenized stocks — same skill, rankType 40 instead of 10. */
 export async function fetchStockUniverse(): Promise<AssetMetrics[]> {
-  const stocks = await callSkill<{ list: TokenRankItem[] }>("token-rank", {
+  const stocks = await callSkill<{ tokens: TokenRankItem[] }>("token-rank", {
     rankType: 40,
     chainId: CHAIN_ID,
     page: 1,
     size: 20,
   });
 
-  return stocks.list.map((s) => ({
+  return stocks.tokens.map((s) => ({
     symbol: s.symbol,
     values: {
-      volume: Number(s.volume ?? 0),
+      volume: Number(s.volume24h ?? 0),
       marketCap: Number(s.marketCap ?? 0),
     },
     marketPrice: 0.5,
