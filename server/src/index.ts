@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { fetchCryptoUniverse } from "./adapters/crypto.js";
+import { fetchCryptoUniverse, fetchStockUniverse } from "./adapters/crypto.js";
 import { fetchPredictionUniverse } from "./adapters/prediction.js";
 import { scoreUniverse } from "./scoring.js";
 import { sendSignalEmail } from "./mailer.js";
@@ -15,7 +15,7 @@ app.use(express.json());
 const WEIGHTS: Record<AssetClass, Record<string, number>> = {
   crypto: { volume: 0.25, sentiment: 0.3, smartMoney: 0.3 },
   prediction: { volume: 0.5, participants: 0.5 },
-  bstock: { volume: 0.25, sentiment: 0.3, smartMoney: 0.3 }, // placeholder, same shape as crypto until wired
+  bstock: { volume: 0.5, marketCap: 0.5 },
 };
 
 // --- Budget setup (replaces the "sub-account" idea — see ledger.ts) ---
@@ -36,7 +36,11 @@ app.get("/api/scan/:assetClass", async (req, res) => {
   const assetClass = req.params.assetClass as AssetClass;
   try {
     const universe =
-      assetClass === "prediction" ? await fetchPredictionUniverse() : await fetchCryptoUniverse(); // bstock shares crypto's adapter for now — see crypto.ts note
+      assetClass === "prediction"
+        ? await fetchPredictionUniverse()
+        : assetClass === "bstock"
+        ? await fetchStockUniverse()
+        : await fetchCryptoUniverse();
 
     const scored = scoreUniverse(universe, WEIGHTS[assetClass]);
     res.json(scored);

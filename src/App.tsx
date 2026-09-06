@@ -167,21 +167,11 @@ export default function App() {
         ))}
       </div>
 
-      {assetClass === "bstock" && (
-        <Window title="Pending" icon="○">
-          <p className="text-[12px]" style={{ color: INK }}>
-            Tokenized-stock scoring needs the real crypto-market-rank stock-rank syntax, which isn't confirmed
-            yet. Wire this up once you have that skill doc — same adapter pattern as crypto and prediction.
-          </p>
-        </Window>
-      )}
-
-      {assetClass !== "bstock" && (
-        <>
-          <Window title="Criteria" icon="⚑">
-            <div className="flex flex-col gap-3 text-[12px]" style={{ color: INK }}>
-              <div className="flex flex-wrap items-center gap-3">
-                <span>Sensitivity</span>
+      <>
+        <Window title="Criteria" icon="⚑">
+          <div className="flex flex-col gap-3 text-[12px]" style={{ color: INK }}>
+            <div className="flex flex-wrap items-center gap-3">
+              <span>Sensitivity</span>
                 {(Object.keys(SENSITIVITY) as SensitivityKey[]).map((key) => (
                   <label key={key} className="flex items-center gap-1 cursor-pointer">
                     <input type="radio" name="sensitivity" checked={sensitivity === key} onChange={() => setSensitivity(key)} />
@@ -295,7 +285,6 @@ export default function App() {
             </Window>
           )}
         </>
-      )}
     </div>
   );
 }
