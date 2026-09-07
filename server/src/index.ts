@@ -7,16 +7,17 @@ import { scoreUniverse } from "./scoring.js";
 import { sendSignalEmail } from "./mailer.js";
 import { swapAndConfirm, quotePrediction, placePredictionOrder } from "./bawClient.js";
 import { getBudget, tryDebit, setBudget, type AssetClass } from "./ledger.js";
-
+import { suggestWeights } from "./weightSuggester.js";
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const WEIGHTS: Record<AssetClass, Record<string, number>> = {
+const DEFAULT_WEIGHTS: Record<AssetClass, Record<string, number>> = {
   crypto: { volume: 0.25, sentiment: 0.3, smartMoney: 0.3 },
   prediction: { volume: 0.5, participants: 0.5 },
   bstock: { volume: 0.5, marketCap: 0.5 },
 };
+
 
 // --- Budget setup (replaces the "sub-account" idea — see ledger.ts) ---
 app.post("/api/budget/:assetClass", (req, res) => {
@@ -26,23 +27,36 @@ app.post("/api/budget/:assetClass", (req, res) => {
   res.json({ assetClass, budget: getBudget(assetClass) });
 });
 
+app.post("/api/suggest-weights", async (req, res) => {
+  const { assetClass, description } = req.body as { assetClass: AssetClass; description: string };
+  try {
+    const weights = await suggestWeights(assetClass, description);
+    res.json({ weights });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 app.get("/api/budget/:assetClass", (req, res) => {
   const assetClass = req.params.assetClass as AssetClass;
   res.json({ assetClass, budget: getBudget(assetClass) });
 });
 
 // --- Scan + score ---
-app.get("/api/scan/:assetClass", async (req, res) => {
+app.post("/api/scan/:assetClass", async (req, res) => {
   const assetClass = req.params.assetClass as AssetClass;
+  const customWeights = req.body?.weights as Record<string, number> | undefined;
+  const weights = customWeights ?? DEFAULT_WEIGHTS[assetClass];
+
   try {
     const universe =
       assetClass === "prediction"
         ? await fetchPredictionUniverse()
         : assetClass === "bstock"
-        ? await fetchStockUniverse()
-        : await fetchCryptoUniverse();
+          ? await fetchStockUniverse()
+          : await fetchCryptoUniverse();
 
-    const scored = scoreUniverse(universe, WEIGHTS[assetClass]);
+    const scored = scoreUniverse(universe, weights);
     res.json(scored);
   } catch (err) {
     res.status(500).json({ error: String(err) });

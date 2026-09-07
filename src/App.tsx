@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { scan, notify } from "./lib/api";
-import { fetchCryptoUniverse } from "./lib/adapters/crypto"; // local fallback if backend isn't running
+import { scan, notify, suggestWeights } from "./lib/api"; import { fetchCryptoUniverse } from "./lib/adapters/crypto"; // local fallback if backend isn't running
 import { scoreUniverse } from "./lib/scoring";
 import type { ScoredAsset } from "./types";
 
@@ -11,6 +10,28 @@ const SIGNAL = "#E8C13A";
 type Stage = "idle" | "scanning" | "scored" | "notified" | "confirmed";
 type AssetClass = "crypto" | "prediction" | "bstock";
 
+const DEFAULT_WEIGHTS: Record<AssetClass, Record<string, number>> = {
+  crypto: { volume: 0.25, sentiment: 0.3, smartMoney: 0.3 },
+  prediction: { volume: 0.5, participants: 0.5 },
+  bstock: { volume: 0.5, marketCap: 0.5 },
+};
+
+const METRIC_INFO: Record<AssetClass, { key: string; label: string; description: string }[]> = {
+  crypto: [
+    { key: "volume", label: "Volume", description: "How much recent trading activity counts. Higher = favor assets trading heavily right now." },
+    { key: "sentiment", label: "Sentiment", description: "How much social buzz counts. Higher = favor assets people are actively talking about." },
+    { key: "smartMoney", label: "Smart money", description: "How much large, historically successful wallets' positioning counts. Higher = favor assets they're accumulating." },
+  ],
+  prediction: [
+    { key: "volume", label: "Volume", description: "How much money wagered on the market counts. Higher = favor markets with heavier activity." },
+    { key: "participants", label: "Participants", description: "How many people are in the market counts. Higher = favor markets with wider participation." },
+  ],
+  bstock: [
+    { key: "volume", label: "Volume", description: "How much recent trading activity counts. Higher = favor stocks trading heavily right now." },
+    { key: "marketCap", label: "Market cap", description: "How large/established the company is counts. Higher = favor bigger, more stable names." },
+  ],
+};
+
 // Plain-language sensitivity instead of a raw sigma value — the user picks
 // a feel, not a statistic. The number still shows underneath for anyone
 // who wants it, but it's no longer the primary control.
@@ -20,6 +41,7 @@ const SENSITIVITY = {
   conservative: { label: "Conservative — fewer, stronger signals", threshold: 1.5 },
 } as const;
 type SensitivityKey = keyof typeof SENSITIVITY;
+
 
 const ASSET_LABELS: Record<AssetClass, string> = {
   crypto: "Crypto",
@@ -93,6 +115,11 @@ export default function App() {
 
   const threshold = SENSITIVITY[sensitivity].threshold;
 
+  const [selfDescription, setSelfDescription] = useState("");
+  const [suggesting, setSuggesting] = useState(false);
+
+  const [weights, setWeights] = useState(DEFAULT_WEIGHTS);
+  const [weightsOpen, setWeightsOpen] = useState(false);
   const logLinesFor = (ac: AssetClass) =>
     ac === "prediction"
       ? [
@@ -123,13 +150,25 @@ export default function App() {
     }, 380);
 
     try {
-      const scored = await scan(assetClass);
-      setRows(scored);
+      const scored = await scan(assetClass, weights[assetClass]); setRows(scored);
     } catch (err) {
       setBackendError(err instanceof Error ? err.message : "Scan failed — check the backend terminal for the real error.");
       setRows([]);
     }
     setTimeout(() => setStage("scored"), 300);
+  };
+
+  const handleSuggestWeights = async () => {
+    if (!selfDescription.trim()) return;
+    setSuggesting(true);
+    try {
+      const suggested = await suggestWeights(assetClass, selfDescription);
+      setWeights((w) => ({ ...w, [assetClass]: suggested }));
+    } catch (err) {
+      setBackendError(err instanceof Error ? err.message : "Couldn't get AI suggestion — sliders unchanged.");
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
@@ -167,15 +206,68 @@ export default function App() {
       <>
         <Window title="Criteria" icon="⚑">
           <div className="flex flex-col gap-3 text-[12px]" style={{ color: INK }}>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-1.5">
               <span>Sensitivity</span>
               {(Object.keys(SENSITIVITY) as SensitivityKey[]).map((key) => (
                 <label key={key} className="flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="sensitivity" checked={sensitivity === key} onChange={() => setSensitivity(key)} />
                   {SENSITIVITY[key].label}
+
                 </label>
-              ))}
+              ))}</div>
+            <div>
+              <button
+                onClick={() => setWeightsOpen((o) => !o)}
+                className="text-[11px] underline"
+                style={{ color: INK }}
+              >
+                {weightsOpen ? "Hide" : "Customize"} weights (optional — defaults work fine)
+              </button>
+              {weightsOpen && (
+                <div className="mt-2 flex flex-col gap-2 border-2 p-2" style={{ borderColor: INK }}>
+                  <div className="flex flex-col gap-1 mb-2">
+                    <textarea
+                      value={selfDescription}
+                      onChange={(e) => setSelfDescription(e.target.value)}
+                      placeholder="Optional: describe your investing style (e.g. 'I care about community hype more than fundamentals') and let AI set the sliders"
+                      className="border-2 px-2 py-1 text-[12px]"
+                      style={{ borderColor: INK }}
+                      rows={2}
+                    />
+                    <Btn onClick={handleSuggestWeights} disabled={suggesting || !selfDescription.trim()}>
+                      {suggesting ? "Thinking..." : "Suggest weights with AI"}
+                    </Btn>
+                  </div>
+                  {METRIC_INFO[assetClass].map(({ key, label, description }) => (
+                    <div key={key} className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-24">{label}</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={weights[assetClass][key]}
+                          onChange={(e) =>
+                            setWeights((w) => ({ ...w, [assetClass]: { ...w[assetClass], [key]: parseFloat(e.target.value) } }))
+                          }
+                          className="flex-1 accent-black"
+                        />
+                        <span className="w-8 text-right">{weights[assetClass][key].toFixed(2)}</span>
+                      </div>
+                      <span className="text-[10px] opacity-60 ml-[104px]">{description}</span>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setWeights((w) => ({ ...w, [assetClass]: DEFAULT_WEIGHTS[assetClass] }))}
+                    className="self-end text-[10px] underline"
+                  >
+                    Reset to default
+                  </button>
+                </div>
+              )}
             </div>
+
             <div className="text-[10px] opacity-60">
               Under the hood: notify when a candidate's composite score is at least {threshold.toFixed(1)} standard
               deviations above the average of this scan's universe.
