@@ -70,6 +70,7 @@ app.post("/api/notify", async (req, res) => {
     await sendSignalEmail({ to, symbol, composite, threshold, kellyFraction, assetClass });
     res.json({ sent: true });
   } catch (err) {
+    console.error("Email send failed:", err);
     res.status(500).json({ error: String(err) });
   }
 });

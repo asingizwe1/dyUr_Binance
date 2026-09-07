@@ -351,16 +351,9 @@ export default function App() {
                 Kelly-sized suggestion: <span className="font-bold">{(top.kellyFraction * 100).toFixed(1)}%</span> of the{" "}
                 {ASSET_LABELS[assetClass].toLowerCase()} allocation bucket.
               </p>
-              {stage === "notified" ? (
-                <div className="flex gap-2 justify-end pt-2">
-                  <Btn onClick={() => setStage("scored")}>Dismiss</Btn>
-                  <Btn onClick={() => setStage("confirmed")} primary>Confirm &amp; execute</Btn>
-                </div>
-              ) : (
-                <div className="pt-2 text-[12px] font-bold" style={{ color: "#2E7D32" }}>
-                  ✓ Sent to backend — check server logs for the baw order result.
-                </div>
-              )}
+              <div className="flex gap-2 justify-end pt-2">
+                <Btn onClick={() => setStage("scored")}>Dismiss</Btn>
+              </div>
             </div>
           </Window>
         )}

@@ -14,7 +14,7 @@ export async function suggestWeights(assetClass: string, description: string): P
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
         body: JSON.stringify({
-            model: "llama-3.1-8b-instant",
+            model: "openai/gpt-oss-20b",
             messages: [
                 {
                     role: "system",
