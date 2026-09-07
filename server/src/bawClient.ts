@@ -16,8 +16,7 @@ const execFileAsync = promisify(execFile);
  * callers don't have to check it themselves.
  */
 export async function baw<T = unknown>(args: string[]): Promise<T> {
-  const { stdout } = await execFileAsync("baw", [...args, "--json"]);
-  const parsed = JSON.parse(stdout) as { success: boolean; data: T };
+  const { stdout } = await execFileAsync("baw", [...args, "--json"], { shell: true }); const parsed = JSON.parse(stdout) as { success: boolean; data: T };
   if (!parsed.success) {
     throw new Error(`baw ${args.join(" ")} returned success:false — ${stdout}`);
   }

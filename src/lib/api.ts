@@ -4,7 +4,10 @@ const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:3001";
 
 export async function scan(assetClass: "crypto" | "prediction" | "bstock"): Promise<ScoredAsset[]> {
   const res = await fetch(`${BASE}/api/scan/${assetClass}`);
-  if (!res.ok) throw new Error(`Scan failed: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Scan failed: ${res.status}`);
+  }
   return res.json();
 }
 

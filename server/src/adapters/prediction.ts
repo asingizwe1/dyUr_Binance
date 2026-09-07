@@ -1,24 +1,30 @@
 import { baw } from "../bawClient.js";
 import type { AssetMetrics } from "../types.js";
 
-interface MarketListItem {
-  marketTopicId: string;
-  marketId?: string;
-  marketTitle: string;
-  volume?: number;
-  participants?: number;
-  tokenId?: string; // outcome token to trade — verify exact field name against real output
+// Confirmed against a real response — two levels of nesting, not flat.
+interface Outcome {
+  name: string; // "Yes" / "No"
+  price: number; // 0-1, this IS the market-implied probability
+  tokenId: string;
 }
 
-/**
- * NOTE on field names: prediction.md documents `market list`'s parameters
- * but not its full response schema. The field names below (volume,
- * participants, tokenId) are reasonable guesses based on the sort options
- * (VOLUME, PARTICIPANTS) — run `baw prediction market list --json` once
- * for real and adjust these to match the actual keys before demo night.
- */
+interface Market {
+  marketId: number;
+  title: string;
+  tradeVolume: number;
+  liquidity: number;
+  outcomes: Outcome[];
+}
+
+interface MarketTopic {
+  marketTopicId: number;
+  title: string;
+  participantCount: number;
+  markets: Market[];
+}
+
 export async function fetchPredictionUniverse(): Promise<AssetMetrics[]> {
-  const { list } = await baw<{ list: MarketListItem[] }>([
+  const { marketTopics } = await baw<{ marketTopics: MarketTopic[] }>([
     "prediction",
     "market",
     "list",
@@ -29,28 +35,21 @@ export async function fetchPredictionUniverse(): Promise<AssetMetrics[]> {
   ]);
 
   const rows: AssetMetrics[] = [];
-  for (const market of list) {
-    if (!market.marketId) continue;
-    // last-trade-price is a historical fill, not a live quote (per prediction.md) —
-    // fine for scoring/ranking, but re-quote via `prediction trade quote` right
-    // before actually executing, since this can be stale.
-    const priceData = await baw<{ price: number }>([
-      "prediction",
-      "market",
-      "last-trade-price",
-      "--marketId",
-      market.marketId,
-    ]).catch(() => ({ price: 0.5 })); // no recent trades — neutral fallback
+  for (const topic of marketTopics) {
+    for (const market of topic.markets) {
+      const yes = market.outcomes.find((o) => o.name === "Yes");
+      if (!yes) continue; // skip non-binary markets for now
 
-    rows.push({
-      symbol: market.marketTitle,
-      values: {
-        volume: market.volume ?? 0,
-        participants: market.participants ?? 0,
-      },
-      marketPrice: priceData.price,
-      raw: { marketTopicId: market.marketTopicId, marketId: market.marketId, tokenId: market.tokenId },
-    });
+      rows.push({
+        symbol: `${topic.title} — ${market.title}`,
+        values: {
+          volume: market.tradeVolume,
+          participants: topic.participantCount,
+        },
+        marketPrice: yes.price, // already the live implied probability
+        raw: { marketId: market.marketId, tokenId: yes.tokenId, marketTopicId: topic.marketTopicId },
+      });
+    }
   }
   return rows;
 }
