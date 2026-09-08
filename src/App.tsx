@@ -178,9 +178,14 @@ export default function App() {
 
   const sendNotification = async () => {
     setStage("notified");
-    if (!top || !email) return;
+    const qualifying = rows.filter((r) => r.composite >= threshold);
+    if (!qualifying.length || !email) return;
     try {
-      await notify({ to: email, symbol: top.symbol, composite: top.composite, threshold, kellyFraction: top.kellyFraction, assetClass });
+      await Promise.all(
+        qualifying.map((r) =>
+          notify({ to: email, symbol: r.symbol, composite: r.composite, threshold, kellyFraction: r.kellyFraction, assetClass })
+        )
+      );
     } catch {
       // Non-fatal for the demo — the on-screen dialog still shows the signal either way.
     }
@@ -192,7 +197,7 @@ export default function App() {
         <h1 className="text-lg font-bold uppercase tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif", color: INK }}>
           ✦ DyUr — DYOR Agent ✦
         </h1>
-        <span className="text-[11px]" style={{ color: INK }}>Track A · Agent OS</span>
+        <span className="text-[11px]" style={{ color: INK }}>BINANCE · Agent OS</span>
       </div>
 
       <div className="w-full max-w-2xl flex gap-2">
@@ -340,17 +345,21 @@ export default function App() {
           </Window>
         )}
 
-        {(stage === "notified" || stage === "confirmed") && qualifies && top && (
-          <Window title="Buy signal — confirm required" icon="✉">
-            <div className="text-[12px] space-y-2" style={{ color: INK }}>
-              <p>
-                <span className="font-bold">{top.symbol}</span> crossed your threshold: composite{" "}
-                <span className="font-bold">{top.composite.toFixed(2)}σ</span>.
-              </p>
-              <p>
-                Kelly-sized suggestion: <span className="font-bold">{(top.kellyFraction * 100).toFixed(1)}%</span> of the{" "}
-                {ASSET_LABELS[assetClass].toLowerCase()} allocation bucket.
-              </p>
+        {(stage === "notified" || stage === "confirmed") && qualifies && (
+          <Window title="Signal" icon="✉">
+            <div className="text-[12px] space-y-3" style={{ color: INK }}>
+              {rows.filter((r) => r.composite >= threshold).map((r) => (
+                <div key={r.symbol} className="border-b pb-2 last:border-b-0" style={{ borderColor: INK }}>
+                  <p>
+                    <span className="font-bold">{r.symbol}</span> crossed your threshold: composite{" "}
+                    <span className="font-bold">{r.composite.toFixed(2)}σ</span>.
+                  </p>
+                  <p>
+                    Kelly-sized suggestion: <span className="font-bold">{(r.kellyFraction * 100).toFixed(1)}%</span> of the{" "}
+                    {ASSET_LABELS[assetClass].toLowerCase()} allocation bucket.
+                  </p>
+                </div>
+              ))}
               <div className="flex gap-2 justify-end pt-2">
                 <Btn onClick={() => setStage("scored")}>Dismiss</Btn>
               </div>

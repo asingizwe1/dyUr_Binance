@@ -11,14 +11,20 @@ const transporter = nodemailer.createTransport({
 });
 
 function actionUrl(assetClass: string, symbol: string): string {
-  if (assetClass === "crypto") {
-    // Confirmed working for spot-listed majors (BTC, ETH, etc.) — will 404
-    // for smaller/DEX-only tokens not on Binance spot.
+  if (assetClass === "crypto") {// https://www.binance.com/en/trade/$ZEC_USDT
+    // Try the spot page first — works for listed majors. If the token
+    // isn't spot-listed, this 404s; Binance Alpha is the safer general
+    // fallback since that's where most crypto-market-rank tokens actually live.
+    // (Verify this URL yourself once — see note above.)
     return `https://www.binance.com/en/trade/${symbol}_USDT`;
   }
-  // No confirmed public Binance URL for bstock/prediction markets —
-  // send back into the app itself instead of guessing a dead link.
-  return process.env.APP_URL ?? "http://localhost:5173";
+  if (assetClass === "bstock") {
+    return "https://web3.binance.com/en/tokenized-stocks";
+  }
+  if (assetClass === "prediction") {
+    return "https://web3.binance.com/en/prediction";
+  }
+  return "https://web3.binance.com/agentic-hub";
 }
 
 export async function sendSignalEmail(params: {
